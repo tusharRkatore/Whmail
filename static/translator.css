@@ -1,0 +1,154 @@
+body {
+    background-color: #2d283e;
+    font-family: 'Comic Sans MS', sans-serif;
+}
+
+.container {
+    max-width: 600px;
+    margin: 50px auto;
+    text-align: center;
+    padding: 20px;
+    background-color: white;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    color: #f0ad4e;
+    font-size: 36px;
+    margin-bottom: 20px;
+}
+
+select, textarea, button {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 18px;
+    border-radius: 5px;
+    border: 2px solid #ddd;
+}
+
+button {
+    width: 40%;
+    height: 50px;
+    padding: 10px;
+    margin: 10px 0;
+    background-color: #802bb1;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #564f6f;
+}
+
+
+
+#senderEmail{
+    width: 90%;
+    height: 20px;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 18px;
+    border-radius: 5px;
+    border: 2px solid #ddd;
+}
+
+#senderpassword{
+    width: 90%;
+    height: 20px;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 18px;
+    border-radius: 5px;
+    border: 2px solid #ddd;
+}
+
+.mail_cat{
+    border-style: solid;
+    border-color: black;
+}
+
+.textbox{
+    margin-left: 10%;
+    align-items: center;
+    width: 80%;
+    height: 200px;
+    display: flex;
+    justify-content: space-between;
+}
+
+textarea {
+    width: 40%;
+    height: 150px;
+}
+
+#stopBtn {
+    width: 80%;
+    background-color: #d9534f;
+}
+
+#stopBtn:hover {
+    background-color: #c9444f;
+}
+
+#inputLang{
+    width: 40%;
+}
+#outputLang{
+    width: 40%;
+}
+
+#translateBtn{
+    background-color: #67c87a;
+}
+
+#recipientEmail {
+    width: 80%;
+    padding: 10px;
+    margin: 10px 0;
+    font-size: 18px;
+    border-radius: 5px;
+    border: 2px solid #ddd;
+}
+
+#sendEmailBtn {
+    width: 100%;
+    padding: 10px;
+    background-color: #67c87a;
+    color: white;
+    font-size: 18px;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+}
+
+#sendEmailBtn:hover {
+    background-color: #57b07a;
+}
+
+
+@media (max-width: 768px) {
+    .textbox {
+        flex-direction: column;
+    }
+    textarea {
+        width: 100%;
+    }
+    #inputLang, #outputLang {
+        width: 100%;
+    }
+}
+@media (max-width: 480px) {
+    h1 {
+        font-size: 28px;
+    }
+    button {
+        font-size: 16px;
+    }
+    #sendEmailBtn {
+        font-size: 16px;
+    }
+    textarea {
+        height: 120px;
+    }
+}

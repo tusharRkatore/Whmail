@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhisperMail</title>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Sans+MS:wght@700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/translator.css">
+</head>
+<body>
+
+    <div class="container">
+        <h1>WhisperMail</h1>
+ 
+        <!-- Language selection for speech recognition and translation -->
+        <label for="inputLang">Select Input Language:</label>
+        <select id="inputLang">
+            <option value="en">English</option>
+            <option value="mr">Marathi</option>
+            <option value="hi">Hindi</option>
+            <option value="ml">Malayalam</option>
+            <option value="ta">Tamil</option>
+            <option value="te">Telugu</option>
+        </select><br>
+
+        <label for="outputLang">Select Output Language:</label>
+        <select id="outputLang">
+            <option value="en">English</option>
+            <option value="mr">Marathi</option>
+            <option value="hi">Hindi</option>
+            <option value="ml">Malayalam</option>
+            <option value="ta">Tamil</option>
+            <option value="te">Telugu</option>
+        </select><br>
+ 
+        <!-- senders mail id and password -->
+        <!-- <label for="SenderEmail">Sender's detail</label> -->
+         <h2>Sender's detail</h2>
+         <div>
+            <label for="SenderEmail">Sender's Email:</label><br>
+            <input type="email" id="senderEmail" placeholder="Enter your email" required><br>
+            <label for="SenderEmail">Sender's Password</label>
+            <input type="password" id="senderpassword" placeholder="Enter your App Password" required>
+         </div>
+        
+        
+
+        <!-- Section for Recognizing Email Subject -->
+        <div class="mail_cat">
+            <h2>Recognize Email Subject</h2>
+            <div class="textbox">
+                <textarea id="recognizedSubject" placeholder="Recognized Subject..." readonly></textarea>
+
+                <textarea id="translatedSubject" placeholder="Translated Subject..." readonly></textarea>
+
+            </div>
+        <h3>Translated Subject</h3>
+        <button id="speakSubjectBtn">Please Speak the Subject</button>
+        <button id="continueSubjectBtn">Continue Subject</button>
+
+        </div><br>
+
+        <div class="mail_cat">
+            <!-- Section for Recognizing Email Body -->
+            <h2>Recognize Email Body</h2>
+            <div class="textbox">
+                <textarea id="recognizedBody" placeholder="Recognized Body..." readonly></textarea>
+                
+                <textarea id="translatedBody" placeholder="Translated Body..." readonly></textarea>
+            </div>
+            
+
+            <h3>Translated Body</h3>
+
+            <button id="speakBodyBtn">Please add the email Body</button>
+            <button id="continueBodyBtn">Continue Body</button>
+        </div>
+
+        <!-- File Attachment -->
+        <h2>Add Attachments</h2>
+        <label for="attachment">Add an attachment:</label>
+        <input type="file" id="attachment"><br>
+        <button id="uploadBtn">Upload File</button>
+
+        <!-- Button to Stop Recognition -->
+        <button id="stopBtn">Stop Recognition</button>
+
+        <!-- Button to translate recognized text -->
+        <button id="translateBtn">Translate</button>
+
+        <!-- Section for Sending Email -->
+        <h2>Send Translation via Email</h2>
+        <label for="recipientEmail">Recipient's Email:</label>
+        <input type="email" id="recipientEmail" placeholder="Enter recipient's email" required>
+        <button id="sendEmailBtn">Send Email</button>
+
+    </div>
+
+    <script src="/static/translator.js"></script>
+</body>
+</html>
