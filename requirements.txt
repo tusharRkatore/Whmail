@@ -1,0 +1,8 @@
+Flask
+SpeechRecognition
+deep-translator
+Werkzeug
+pydub
+python-dotenv
+requests
+gTTS
