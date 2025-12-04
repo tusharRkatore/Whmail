@@ -66,15 +66,6 @@
       textarea {
         height: 120px;
         resize: none;
-        color: #ffffff;
-      }
-
-      /* Make subject/body editable by user */
-      #recognizedSubject,
-      #recognizedBody {
-        background: #001f3f;
-        color: #ffffff;
-        border: 2px solid #ffffff30;
       }
 
       .textbox {
@@ -174,11 +165,13 @@
         <div class="textbox">
           <textarea
             id="recognizedSubject"
-            placeholder="Type or recognize Subject..."
+            placeholder="Recognized Subject..."
+            readonly
           ></textarea>
           <textarea
             id="translatedSubject"
             placeholder="Translated Subject..."
+            readonly
           ></textarea>
         </div>
         <button id="speakSubjectBtn">Please Speak the Subject</button>
@@ -190,11 +183,13 @@
         <div class="textbox">
           <textarea
             id="recognizedBody"
-            placeholder="Type or recognize Body..."
+            placeholder="Recognized Body..."
+            readonly
           ></textarea>
           <textarea
             id="translatedBody"
             placeholder="Translated Body..."
+            readonly
           ></textarea>
         </div>
         <button id="speakBodyBtn">Please add the email Body</button>
