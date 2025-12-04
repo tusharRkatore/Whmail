@@ -3,155 +3,127 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WhisperMail UI</title>
-    <style>
-      body {
-        font-family: "Poppins", sans-serif;
-        background: #001f3f;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        min-height: 100vh;
-      }
-
-      .container {
-        width: 95%;
-        max-width: 1000px;
-        background: #ffffff;
-        padding: 40px;
-        border-radius: 20px;
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.1);
-        margin: 40px 0;
-      }
-
-      h1 {
-        text-align: center;
-        font-size: 38px;
-        font-weight: 700;
-        margin-bottom: 25px;
-        color: #1a1a1a;
-      }
-
-      h2,
-      label {
-        color: #1a1a1a;
-        font-weight: 600;
-      }
-
-      select,
-      input[type="email"],
-      input[type="password"],
-      input[type="file"],
-      textarea {
-        width: 100%;
-        padding: 12px;
-        border-radius: 10px;
-        border: 1px solid #d0d0d0;
-        margin-top: 8px;
-        margin-bottom: 15px;
-        background: #ffffff;
-        color: #000000;
-        font-size: 15px;
-        transition: 0.2s ease;
-      }
-
-      select:focus,
-      input:focus,
-      textarea:focus {
-        border-color: #1a73e8;
-        box-shadow: 0 0 6px rgba(26, 115, 232, 0.4);
-      }
-
-      textarea {
-        height: 120px;
-        resize: none;
-      }
-
-      #recognizedSubject,
-      #recognizedBody,
-      #translatedSubject,
-      #translatedBody {
-        background: #f0f4ff;
-        border: 1px solid #b8c7e6;
-      }
-
-      .textbox {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-      }
-
-      button {
-        background: #004b8d;
-        color: #ffffff;
-        padding: 14px 20px;
-        border: none;
-        border-radius: 10px;
-        font-weight: 600;
-        cursor: pointer;
-        font-size: 16px;
-        transition: 0.25s ease;
-        margin-top: 8px;
-        width: 100%;
-      }
-
-      button:hover {
-        background: #006bb8;
-        box-shadow: 0 4px 15px rgba(0, 91, 187, 0.5);
-        transform: translateY(-2px);
-      }
-
-      button:hover {
-        background: #155ac7;
-        box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
-        transform: translateY(-2px);
-      }
-
-      .mail_cat {
-        margin-top: 30px;
-        padding: 25px;
-        border-radius: 16px;
-        background: #f8faff;
-        border: 1px solid #e0e6f5;
-        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.03);
-      }
-
-      @media (max-width: 768px) {
-        .textbox {
-          grid-template-columns: 1fr;
-        }
-
-        h1 {
-          font-size: 30px;
-        }
-      }
-    </style>
+    <title>WhisperMail</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Comic+Sans+MS:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/translator.css" />
   </head>
   <body>
     <div class="container">
-      <h2>WhisperMail</h2>
+      <h1>WhisperMail</h1>
 
-      <label>Recipient Email</label>
-      <input type="email" id="recipient" placeholder="Enter recipient email" />
+      <!-- Language selection for speech recognition and translation -->
+      <label for="inputLang">Select Input Language:</label>
+      <select id="inputLang">
+        <option value="en">English</option>
+        <option value="mr">Marathi</option>
+        <option value="hi">Hindi</option>
+        <option value="ml">Malayalam</option>
+        <option value="ta">Tamil</option>
+        <option value="te">Telugu</option></select
+      ><br />
 
-      <label>Email Subject</label>
-      <input type="text" id="subject" placeholder="Enter email subject" />
+      <label for="outputLang">Select Output Language:</label>
+      <select id="outputLang">
+        <option value="en">English</option>
+        <option value="mr">Marathi</option>
+        <option value="hi">Hindi</option>
+        <option value="ml">Malayalam</option>
+        <option value="ta">Tamil</option>
+        <option value="te">Telugu</option></select
+      ><br />
 
-      <label>Email Body</label>
-      <textarea id="body" placeholder="Write your email message..."></textarea>
-
-      <div class="neumorph-box">
-        <label>Select Language</label>
-        <select id="language">
-          <option value="en">English</option>
-          <option value="hi">Hindi</option>
-          <option value="mr">Marathi</option>
-        </select>
-
-        <button id="recordBtn">🎤 Start Recording</button>
-        <button id="sendBtn">📩 Send Email</button>
+      <!-- senders mail id and password -->
+      <!-- <label for="SenderEmail">Sender's detail</label> -->
+      <h2>Sender's detail</h2>
+      <div>
+        <label for="SenderEmail">Sender's Email:</label><br />
+        <input
+          type="email"
+          id="senderEmail"
+          placeholder="Enter your email"
+          required
+        /><br />
+        <label for="SenderEmail">Sender's Password</label>
+        <input
+          type="password"
+          id="senderpassword"
+          placeholder="Enter your App Password"
+          required
+        />
       </div>
+
+      <!-- Section for Recognizing Email Subject -->
+      <div class="mail_cat">
+        <h2>Recognize Email Subject</h2>
+        <div class="textbox">
+          <textarea
+            id="recognizedSubject"
+            placeholder="Recognized Subject..."
+            readonly
+          ></textarea>
+
+          <textarea
+            id="translatedSubject"
+            placeholder="Translated Subject..."
+            readonly
+          ></textarea>
+        </div>
+        <h3>Translated Subject</h3>
+        <button id="speakSubjectBtn">Please Speak the Subject</button>
+        <button id="continueSubjectBtn">Continue Subject</button>
+      </div>
+      <br />
+
+      <div class="mail_cat">
+        <!-- Section for Recognizing Email Body -->
+        <h2>Recognize Email Body</h2>
+        <div class="textbox">
+          <textarea
+            id="recognizedBody"
+            placeholder="Recognized Body..."
+            readonly
+          ></textarea>
+
+          <textarea
+            id="translatedBody"
+            placeholder="Translated Body..."
+            readonly
+          ></textarea>
+        </div>
+
+        <h3>Translated Body</h3>
+
+        <button id="speakBodyBtn">Please add the email Body</button>
+        <button id="continueBodyBtn">Continue Body</button>
+      </div>
+
+      <!-- File Attachment -->
+      <h2>Add Attachments</h2>
+      <label for="attachment">Add an attachment:</label>
+      <input type="file" id="attachment" /><br />
+      <button id="uploadBtn">Upload File</button>
+
+      <!-- Button to Stop Recognition -->
+      <button id="stopBtn">Stop Recognition</button>
+
+      <!-- Button to translate recognized text -->
+      <button id="translateBtn">Translate</button>
+
+      <!-- Section for Sending Email -->
+      <h2>Send Translation via Email</h2>
+      <label for="recipientEmail">Recipient's Email:</label>
+      <input
+        type="email"
+        id="recipientEmail"
+        placeholder="Enter recipient's email"
+        required
+      />
+      <button id="sendEmailBtn">Send Email</button>
     </div>
+
+    <script src="/static/translator.js"></script>
   </body>
 </html>
