@@ -6,3 +6,4 @@ pydub
 python-dotenv
 requests
 gTTS
+gunicorn
