@@ -1,26 +1,23 @@
-# Use lightweight Python
 FROM python:3.10-slim
 
-# Prevent Python from buffering logs
-ENV PYTHONUNBUFFERED=1
-
-# Install ffmpeg (required for pydub)
+# Install ffmpeg
 RUN apt-get update && apt-get install -y ffmpeg && apt-get clean
 
-# Create app directory
+# Create working directory
 WORKDIR /app
 
-# Copy requirements
+# Copy requirements FIRST
 COPY requirements.txt .
 
-# Install Python packages
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy entire project
 COPY . .
 
-# Expose Flask port
-EXPOSE 5000
+# Expose port
+EXPOSE 5500
 
-# Start command for Render
+# Run the app
 CMD ["python", "translator.py"]
+

@@ -1,170 +1,166 @@
+# translator.py
+import os, uuid, shutil, subprocess, traceback
 from flask import Flask, request, jsonify, render_template
 import speech_recognition as sr
-import os
-import smtplib
-import ssl
 from werkzeug.utils import secure_filename
+from pydub import AudioSegment, effects
+from deep_translator import GoogleTranslator
+import smtplib, ssl
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
-from email.mime.multipart import MIMEMultipart
-from deep_translator import GoogleTranslator
-from pydub import AudioSegment
-import uuid
-from pydub.utils import which
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates", static_folder="static")
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+recognizer = sr.Recognizer()
+translator = GoogleTranslator(source="auto")
 
-translator = GoogleTranslator(source='auto')
+# -----------------------------------------
+# ffmpeg detection
+# -----------------------------------------
+def find_ffmpeg():
+    return shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+FFMPEG_BIN = find_ffmpeg()
+if not FFMPEG_BIN:
+    print("WARNING: ffmpeg not in PATH. Install ffmpeg for audio conversion.")
 
-# Globals
-recognized_subject = ""
-recognized_body = ""
+def ffmpeg_convert(in_path, out_wav_path):
+    if not FFMPEG_BIN:
+        raise RuntimeError("ffmpeg not found on PATH.")
+    cmd = [
+        FFMPEG_BIN, "-y", "-i", in_path,
+        "-ac", "1", "-ar", "16000", "-sample_fmt", "s16",
+        out_wav_path
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg failed: {proc.stderr.strip()}")
+    if not os.path.exists(out_wav_path) or os.path.getsize(out_wav_path) < 500:
+        raise RuntimeError("Converted WAV missing or too small.")
+    return out_wav_path
 
+def normalize_and_save(in_path, out_path):
+    audio = AudioSegment.from_file(in_path)
 
-def translate_text(text, output_lang):
+    if audio.dBFS < -35.0:
+        target_db = -20.0
+        change = target_db - audio.dBFS
+        audio = audio.apply_gain(change)
+
+    audio = effects.normalize(audio)
+
+    audio.export(
+        out_path,
+        format="wav",
+        parameters=["-ac", "1", "-ar", "16000", "-sample_fmt", "s16"]
+    )
+
+    if not os.path.exists(out_path) or os.path.getsize(out_path) < 500:
+        raise RuntimeError("Normalization produced empty file.")
+    return out_path
+
+def transcribe_wav(wav_path, lang="en-US"):
+    r = sr.Recognizer()
     try:
-        return GoogleTranslator(source='auto', target=output_lang).translate(text)
-    except Exception as e:
-        return f"Error: Translation failed → {e}"
-
-
-def ensure_wav(path):
-    """
-    Convert any audio file into WAV.
-    Works for webm / m4a / mp3 / ogg / mp4
-    """
-    filename = os.path.basename(path)
-    name, ext = os.path.splitext(filename)
-    ext = ext.lower()
-
-    if ext == ".wav":
-        return path
-
-    wav_path = f"temp_{uuid.uuid4().hex}.wav"
-
-    try:
-        audio = AudioSegment.from_file(path)
-        audio.export(wav_path, format="wav")
-        return wav_path
-    except Exception as e:
-        raise RuntimeError(f"Audio conversion failed: {e}")
-
-
-def speech_to_text_from_file(uploaded, input_lang, append=False, is_subject=True):
-    global recognized_subject, recognized_body
-
-    orig_path = f"upload_{uuid.uuid4().hex}_{secure_filename(uploaded.filename)}"
-    uploaded.save(orig_path)
-
-    wav_path = None
-
-    try:
-        wav_path = ensure_wav(orig_path)
-
-        r = sr.Recognizer()
         with sr.AudioFile(wav_path) as source:
-            r.adjust_for_ambient_noise(source, duration=0.3)
             audio_data = r.record(source)
-
-        text = r.recognize_google(audio_data, language=input_lang)
-
-        if is_subject:
-            recognized_subject = (recognized_subject +
-                                  " " + text).strip() if append else text
-            return recognized_subject
-        else:
-            recognized_body = (recognized_body + " " +
-                               text).strip() if append else text
-            return recognized_body
-
+        text = r.recognize_google(audio_data, language=lang)
+        return text
     except sr.UnknownValueError:
-        return "Error: Could not understand audio."
+        raise RuntimeError("Could not understand audio. Speak clearly and try again.")
     except sr.RequestError as e:
-        return f"Error: Google STT failed → {e}"
-    except RuntimeError as e:
-        return f"Error: {e}"
+        raise RuntimeError(f"Speech recognition request failed: {e}")
     except Exception as e:
-        return f"Unexpected error: {e}"
-    finally:
-        try:
-            if os.path.exists(orig_path):
-                os.remove(orig_path)
-            if wav_path and wav_path != orig_path and os.path.exists(wav_path):
-                os.remove(wav_path)
-        except:
-            pass
+        raise RuntimeError(f"Transcription error: {e}")
 
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-@app.route('/')
-def home():
-    return render_template('index.html')
-
-
-@app.route('/start_recognition', methods=['POST'])
+# -----------------------------------------
+# SPEECH TO TEXT ROUTE
+# -----------------------------------------
+@app.route("/start_recognition", methods=["POST"])
 def start_recognition():
-    if "audio" not in request.files:
-        return jsonify({"error": "No audio file received"}), 400
+    try:
+        if "audio_file" not in request.files:
+            return jsonify({"error": "No audio_file in request"}), 400
 
-    audio_file = request.files["audio"]
-    input_lang = request.form.get("inputLang", "en")
-    append = request.form.get("append", "false").lower() == "true"
-    is_subject = request.form.get("is_subject", "true").lower() == "true"
+        f = request.files["audio_file"]
+        if f.filename == "":
+            return jsonify({"error": "Empty filename"}), 400
 
-    result = speech_to_text_from_file(
-        audio_file, input_lang, append, is_subject)
+        uid = uuid.uuid4().hex
+        fname = secure_filename(f.filename)
+        saved = os.path.join(UPLOAD_DIR, f"{uid}_{fname}")
+        f.save(saved)
 
-    if isinstance(result, str) and result.startswith("Error"):
-        return jsonify({"error": result}), 400
-    return jsonify({"text": result})
+        converted = os.path.join(UPLOAD_DIR, f"{uid}_conv.wav")
+        try:
+            ffmpeg_convert(saved, converted)
+        except Exception as e:
+            return jsonify({"error": f"Audio conversion failed: {str(e)}"}), 400
 
+        normalized = os.path.join(UPLOAD_DIR, f"{uid}_norm.wav")
+        try:
+            normalize_and_save(converted, normalized)
+        except:
+            normalized = converted
 
-@app.route('/stop_recognition', methods=['POST'])
-def stop_recognition():
-    return jsonify({
-        "recognizedSubject": recognized_subject,
-        "recognizedBody": recognized_body
-    })
+        input_lang = request.form.get("inputLang", "en-US")
+        try:
+            text = transcribe_wav(normalized, lang=input_lang)
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
 
+        for p in (saved, converted, normalized):
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except:
+                pass
 
-@app.route('/translate', methods=['POST'])
-def translate_text_route():
-    data = request.json
+        return jsonify({"text": text})
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Server error: {e}"}), 500
+
+# -----------------------------------------
+# UPDATED WORKING TRANSLATE ROUTE
+# -----------------------------------------
+@app.route("/translate", methods=["POST"])
+def translate_route():
+    data = request.json or {}
     text = data.get("text", "")
     output_lang = data.get("outputLang", "en")
 
-    translation = translate_text(text, output_lang)
+    try:
+        translator = GoogleTranslator(source="auto", target=output_lang)
+        translated_text = translator.translate(text)
+        return jsonify({"translated": translated_text})
+    except Exception as e:
+        return jsonify({"error": f"Translation failed: {e}"}), 500
 
-    if translation.startswith("Error"):
-        return jsonify({"error": translation}), 500
-
-    return jsonify({"translated": translation})
-
-
-@app.route('/upload_attachment', methods=['POST'])
+# -----------------------------------------
+# FILE UPLOAD + EMAIL REMAINS SAME
+# -----------------------------------------
+@app.route("/upload_attachment", methods=["POST"])
 def upload_attachment():
     if "file" not in request.files:
-        return "No file part", 400
-
+        return jsonify({"error": "No file part"}), 400
     f = request.files["file"]
     if f.filename == "":
-        return "No selected file", 400
-
-    folder = "uploads"
-    os.makedirs(folder, exist_ok=True)
-
-    path = os.path.join(folder, secure_filename(f.filename))
+        return jsonify({"error": "No selected file"}), 400
+    path = os.path.join(UPLOAD_DIR, secure_filename(f.filename))
     f.save(path)
+    return jsonify({"message": "File uploaded", "attachment_path": path})
 
-    return jsonify({"message": "File uploaded successfully", "attachment_path": path})
-
-
-# ---------------------------------------------------------
-# UPDATED EMAIL SENDING WITH GMAIL APP PASSWORD SUPPORT
-# ---------------------------------------------------------
-@app.route('/send_email', methods=['POST'])
+@app.route("/send_email", methods=["POST"])
 def send_email():
     sender = request.form.get("senderEmail")
-    password = request.form.get("senderPassword")  # <-- Must be App Password
+    password = request.form.get("senderPassword")
     receiver = request.form.get("recipientEmail")
     subject = request.form.get("subject")
     body = request.form.get("body")
@@ -181,40 +177,30 @@ def send_email():
 
     att_path = None
     if attachment and attachment.filename:
-        folder = "uploads"
-        os.makedirs(folder, exist_ok=True)
-        att_path = os.path.join(folder, secure_filename(attachment.filename))
+        att_path = os.path.join(UPLOAD_DIR, secure_filename(attachment.filename))
         attachment.save(att_path)
-
-        with open(att_path, "rb") as f:
-            part = MIMEApplication(f.read())
-            part.add_header("Content-Disposition",
-                            f'attachment; filename="{attachment.filename}"')
+        with open(att_path, "rb") as fh:
+            part = MIMEApplication(fh.read())
+            part.add_header(
+                "Content-Disposition",
+                f'attachment; filename="{attachment.filename}"'
+            )
             msg.attach(part)
 
     try:
         ctx = ssl.create_default_context()
-
-        # Gmail SMTP using App Password
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.ehlo()
             server.starttls(context=ctx)
-            server.ehlo()
-            server.login(sender, password)   # <-- WORKS ONLY WITH APP PASSWORD
+            server.login(sender, password)
             server.sendmail(sender, receiver, msg.as_string())
-
         return jsonify({"message": "Email sent successfully!"})
-
     except smtplib.SMTPAuthenticationError:
-        return jsonify({
-            "error": "Authentication failed. Use a Gmail App Password, not your normal password."
-        }), 401
+        return jsonify({"error": "Authentication failed. Use Gmail App Password."}), 401
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
         if att_path and os.path.exists(att_path):
             os.remove(att_path)
 
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5500)
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 5500)))
