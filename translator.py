@@ -168,8 +168,8 @@ def upload_attachment():
 # - Prefer BREVO_API_KEY (Brevo / Sendinblue REST SMTP endpoint)
 # - If BREVO_API_KEY not present or Brevo fails, fallback to Gmail SMTP using app password
 # ----------------------------
-BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "").strip()  # set this in env for Docker/hosting
-GMAIL_FALLBACK = os.environ.get("USE_GMAIL_FALLBACK", "true").lower() != "false"
+BREVO_API_KEY = os.environ.get("xsmtpsib-038c66eaabbf2346cc2b9f3f936b3040aaee94a83d00eba52f6bb98ba3b1149e-3joQumhnPnmN3scp", "").strip()  # set this in env for Docker/hosting
+GMAIL_FALLBACK = os.environ.get("ppxx uwzx loln ofdw", "true").lower() != "false"
 
 def send_via_brevo(sender, receiver, subject, body, attachment_file_path=None, attachment_filename=None):
     payload = {
