@@ -1,340 +1,248 @@
-// translator.js — recorder + UI handlers (frontend append-on-continue, Option A)
+// static/translator.js
+function q(id) {
+  return document.getElementById(id);
+}
 
-(() => {
-  // ---------- helpers ----------
-  const q = (id) => document.getElementById(id);
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
 
-  // config: how many seconds to auto-record by default
-  const DEFAULT_SECONDS = 6; // increase if you want longer recordings
+function setRecordingState(state) {
+  isRecording = state;
+  q("speakSubjectBtn").disabled = state;
+  q("continueSubjectBtn").disabled = state;
+  q("speakBodyBtn").disabled = state;
+  q("continueBodyBtn").disabled = state;
+  q("stopBtn").disabled = !state;
+}
 
-  // state
-  let mediaRecorder = null;
-  let audioChunks = [];
-  let isRecording = false;
-
-  function setRecordingState(state) {
-    isRecording = state;
-    // disable start buttons while recording
-    q("speakSubjectBtn").disabled = state;
-    q("continueSubjectBtn").disabled = state;
-    q("speakBodyBtn").disabled = state;
-    q("continueBodyBtn").disabled = state;
-    q("stopBtn").disabled = !state;
-  }
-
-  // ---------- recording ----------
-  async function startRecording() {
-    audioChunks = [];
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunks.push(e.data);
-      };
-
-      // ensure mic tracks are stopped when recorder stops
-      mediaRecorder.onstop = () => {
-        try {
-          stream.getTracks().forEach((t) => t.stop());
-        } catch (e) {}
-      };
-
-      mediaRecorder.start();
-      setRecordingState(true);
-      console.log("Recording started");
-      return true;
-    } catch (err) {
-      console.error("getUserMedia error:", err);
-      alert(
-        "Cannot access microphone. Allow microphone permission and try again."
-      );
-      throw err;
-    }
-  }
-
-  function stopRecorderAndGetBlob() {
-    return new Promise((resolve, reject) => {
-      if (!mediaRecorder) return reject(new Error("Recorder not started"));
-
-      // when onstop fires, the blob will be available
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, {
-          type: audioChunks[0]?.type || "audio/webm",
-        });
-        mediaRecorder = null;
-        setRecordingState(false);
-        resolve(blob);
-      };
-
+async function startRecording() {
+  audioChunks = [];
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) audioChunks.push(e.data);
+    };
+    mediaRecorder.onstop = () => {
       try {
-        mediaRecorder.stop();
-      } catch (err) {
-        reject(err);
-      }
-    });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (e) {}
+    };
+    mediaRecorder.start();
+    setRecordingState(true);
+  } catch (err) {
+    console.error("Microphone access error:", err);
+    alert("Cannot access microphone. Allow mic permission and retry.");
+    throw err;
+  }
+}
+
+function stopRecordingGetBlob() {
+  return new Promise((resolve, reject) => {
+    if (!mediaRecorder) return reject(new Error("Recorder not started"));
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(audioChunks, {
+        type: audioChunks[0]?.type || "audio/webm",
+      });
+      setRecordingState(false);
+      resolve(blob);
+    };
+    try {
+      mediaRecorder.stop();
+    } catch (err) {
+      setRecordingState(false);
+      const blob = new Blob(audioChunks, {
+        type: audioChunks[0]?.type || "audio/webm",
+      });
+      resolve(blob);
+    }
+  });
+}
+
+async function sendBlob(blob, isSubject, appendFlag) {
+  if (!blob || blob.size < 1000) {
+    alert("Recording too short or empty — speak louder/closer and try again.");
+    return null;
   }
 
-  function blobToFile(blob, filename) {
+  const file = new File([blob], `recording_${Date.now()}.webm`, {
+    type: blob.type,
+  });
+  const form = new FormData();
+  form.append("audio_file", file);
+  form.append("inputLang", q("inputLang").value || "en-US");
+  form.append("append", appendFlag ? "true" : "false");
+  form.append("isSubject", isSubject ? "true" : "false");
+
+  try {
+    const resp = await fetch("/start_recognition", {
+      method: "POST",
+      body: form,
+    });
+    let json;
     try {
-      return new File([blob], filename, { type: blob.type });
+      json = await resp.json();
     } catch (e) {
-      // older browsers fallback
-      blob.name = filename;
-      return blob;
+      json = { error: "Invalid JSON response from server" };
     }
+
+    if (!resp.ok) {
+      const errMsg =
+        json && json.error ? json.error : `Server responded ${resp.status}`;
+      console.error("Server error:", errMsg);
+      alert("Recognition failed: " + errMsg);
+      return null;
+    }
+    return json.text || null;
+  } catch (err) {
+    console.error("Network error:", err);
+    alert("Network error while sending audio: " + err.message);
+    return null;
   }
+}
 
-  // ---------- send to server ----------
-  async function sendBlobToServer(blob, isSubject, appendFlag) {
-    if (!blob) {
-      alert("No audio recorded.");
-      return null;
-    }
-
-    const file = blobToFile(blob, `recording_${Date.now()}.webm`);
-    const form = new FormData();
-    // backend expects "audio_file"
-    form.append("audio_file", file);
-    form.append("inputLang", q("inputLang").value || "en");
-    // we keep appendFlag for frontend logic (backend may ignore it)
-    form.append("append", appendFlag ? "true" : "false");
-    form.append("isSubject", isSubject ? "true" : "false");
-
-    try {
-      const resp = await fetch("/start_recognition", {
-        method: "POST",
-        body: form,
-      });
-
-      // parse JSON safely
-      const json = await resp
-        .json()
-        .catch(() => ({ error: "Invalid JSON from server" }));
-
-      if (!resp.ok) {
-        const errMsg =
-          json && json.error ? json.error : `Server responded ${resp.status}`;
-        console.error("Server error:", errMsg);
-        alert("Recognition failed: " + errMsg);
-        return null;
-      }
-
-      // expected { text: "..." }
-      return json.text || null;
-    } catch (err) {
-      console.error("Network/Fetch error:", err);
-      alert("Network error while sending audio: " + (err.message || err));
-      return null;
-    }
+async function recordThenSend(seconds, isSubject, appendFlag) {
+  try {
+    await startRecording();
+  } catch (e) {
+    return null;
   }
+  return new Promise((resolve) => {
+    setTimeout(async () => {
+      const blob = await stopRecordingGetBlob();
+      const text = await sendBlob(blob, isSubject, appendFlag);
+      resolve(text);
+    }, seconds * 1000);
+  });
+}
 
-  // wrapper to record for seconds and send
-  async function recordForSecondsThenSend(seconds, isSubject, appendFlag) {
+/* UI wiring */
+q("speakSubjectBtn").addEventListener("click", async () => {
+  q("recognizedSubject").value = "Recording...";
+  const text = await recordThenSend(4, true, false);
+  if (text) q("recognizedSubject").value = text;
+});
+
+q("continueSubjectBtn").addEventListener("click", async () => {
+  const prev = q("recognizedSubject").value || "";
+  q("recognizedSubject").value = prev + (prev ? " " : "") + "[recording...]";
+  const text = await recordThenSend(4, true, true);
+  const prefix = (q("recognizedSubject").value || "").replace(
+    /\s*\[recording\.\.\.\]$/,
+    ""
+  );
+  if (text) q("recognizedSubject").value = (prefix + " " + text).trim();
+  else q("recognizedSubject").value = prefix.trim();
+});
+
+q("speakBodyBtn").addEventListener("click", async () => {
+  q("recognizedBody").value = "Recording...";
+  const text = await recordThenSend(4, false, false);
+  if (text) q("recognizedBody").value = text;
+});
+
+q("continueBodyBtn").addEventListener("click", async () => {
+  const prev = q("recognizedBody").value || "";
+  q("recognizedBody").value = prev + (prev ? " " : "") + "[recording...]";
+  const text = await recordThenSend(4, false, true);
+  const prefix = (q("recognizedBody").value || "").replace(
+    /\s*\[recording\.\.\.\]$/,
+    ""
+  );
+  if (text) q("recognizedBody").value = (prefix + " " + text).trim();
+  else q("recognizedBody").value = prefix.trim();
+});
+
+q("stopBtn").addEventListener("click", () => {
+  if (isRecording && mediaRecorder) {
     try {
-      await startRecording();
-    } catch (err) {
-      return null;
+      mediaRecorder.stop();
+      setRecordingState(false);
+      alert("Recording stopped.");
+    } catch (e) {
+      console.warn(e);
     }
+  } else {
+    alert("No active recording.");
+  }
+});
 
-    return new Promise((resolve) => {
-      // auto-stop after seconds
-      setTimeout(async () => {
-        let blob;
-        try {
-          blob = await stopRecorderAndGetBlob();
-        } catch (err) {
-          console.error("Stop error:", err);
-          alert("Failed to stop recording.");
-          resolve(null);
-          return;
-        }
+q("translateBtn").addEventListener("click", async () => {
+  const subject = q("recognizedSubject").value || "";
+  const body = q("recognizedBody").value || "";
+  const out = q("outputLang").value || "en";
 
-        const text = await sendBlobToServer(blob, isSubject, appendFlag);
-        resolve(text);
-      }, seconds * 1000);
+  fetch("/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: subject, outputLang: out }),
+  })
+    .then((r) => r.json())
+    .then(
+      (d) => (q("translatedSubject").value = d.translated || d.error || "")
+    );
+  fetch("/translate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: body, outputLang: out }),
+  })
+    .then((r) => r.json())
+    .then((d) => (q("translatedBody").value = d.translated || d.error || ""));
+});
+
+q("uploadBtn").addEventListener("click", async () => {
+  const file = q("attachment").files[0];
+  if (!file) {
+    alert("Select a file");
+    return;
+  }
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const res = await fetch("/upload_attachment", {
+      method: "POST",
+      body: form,
     });
+    const json = await res.json();
+    alert(json.message || "Uploaded");
+  } catch (e) {
+    console.error(e);
+    alert("Upload failed");
   }
+});
 
-  // ---------- UI wiring ----------
-  async function onSpeakSubject() {
-    q("recognizedSubject").value = "Recording...";
-    const text = await recordForSecondsThenSend(DEFAULT_SECONDS, true, false);
-    if (text) {
-      q("recognizedSubject").value = text; // start fresh
-    } else {
-      // If null, keep previous content (do not overwrite) and show message
-      if (!q("recognizedSubject").value) q("recognizedSubject").value = "";
-    }
+q("sendEmailBtn").addEventListener("click", async () => {
+  const sender = q("senderEmail").value.trim();
+  const pass = q("senderpassword").value.trim();
+  const receiver = q("recipientEmail").value.trim();
+  const subject =
+    q("translatedSubject").value.trim() || q("recognizedSubject").value.trim();
+  const body =
+    q("translatedBody").value.trim() || q("recognizedBody").value.trim();
+
+  if (!sender) return alert("Sender required");
+  if (!receiver) return alert("Recipient required");
+  if (!subject) return alert("Subject required");
+  if (!body) return alert("Body required");
+
+  const form = new FormData();
+  form.append("senderEmail", sender);
+  form.append("senderPassword", pass);
+  form.append("recipientEmail", receiver);
+  form.append("subject", subject);
+  form.append("body", body);
+
+  const att = q("attachment").files[0];
+  if (att) form.append("attachment", att);
+
+  try {
+    const res = await fetch("/send_email", { method: "POST", body: form });
+    const json = await res.json();
+    if (json.error) alert("Error: " + JSON.stringify(json.error));
+    else alert(json.message || "Email result unknown");
+  } catch (e) {
+    console.error("Send email error:", e);
+    alert("Send email failed: " + e.message);
   }
-
-  async function onContinueSubject() {
-    // preserve existing text and append new text when returned
-    q("recognizedSubject").value =
-      (q("recognizedSubject").value || "") + " [recording...]";
-    const text = await recordForSecondsThenSend(DEFAULT_SECONDS, true, true);
-    // Replace the temporary "[recording...]" suffix with real text (append)
-    const prefix = (q("recognizedSubject").value || "").replace(
-      /\s*\[recording\.\.\.\]$/,
-      ""
-    );
-    if (text) {
-      q("recognizedSubject").value = (prefix + " " + text).trim();
-    } else {
-      // remove the temp marker if failed
-      q("recognizedSubject").value = prefix.trim();
-    }
-  }
-
-  async function onSpeakBody() {
-    q("recognizedBody").value = "Recording...";
-    const text = await recordForSecondsThenSend(DEFAULT_SECONDS, false, false);
-    if (text) {
-      q("recognizedBody").value = text;
-    } else {
-      if (!q("recognizedBody").value) q("recognizedBody").value = "";
-    }
-  }
-
-  async function onContinueBody() {
-    q("recognizedBody").value =
-      (q("recognizedBody").value || "") + " [recording...]";
-    const text = await recordForSecondsThenSend(DEFAULT_SECONDS, false, true);
-    const prefix = (q("recognizedBody").value || "").replace(
-      /\s*\[recording\.\.\.\]$/,
-      ""
-    );
-    if (text) {
-      q("recognizedBody").value = (prefix + " " + text).trim();
-    } else {
-      q("recognizedBody").value = prefix.trim();
-    }
-  }
-
-  // manual stop and send (if user wants to stop early)
-  q("stopBtn").addEventListener("click", async () => {
-    if (isRecording && mediaRecorder) {
-      try {
-        // stop recorder and immediately send captured audio
-        const blob = await stopRecorderAndGetBlob();
-        // determine if we were recording subject or body by placeholder text
-        // But we don't track which one was recording — safe approach: ask user to click appropriate button.
-        alert(
-          "Recording stopped. To send, click the same Speak/Continue button again."
-        );
-      } catch (err) {
-        console.error("Stop error:", err);
-        alert("Failed to stop recording.");
-      }
-    } else {
-      alert("No active recording to stop.");
-    }
-  });
-
-  // translation
-  q("translateBtn").addEventListener("click", async () => {
-    const subjectText = q("recognizedSubject").value || "";
-    const bodyText = q("recognizedBody").value || "";
-    const outLang = q("outputLang").value || "en";
-
-    // subject
-    try {
-      const res = await fetch("/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: subjectText, outputLang: outLang }),
-      });
-      const data = await res.json();
-      q("translatedSubject").value = data.translated || data.error || "";
-    } catch (err) {
-      console.error("Translate subject error", err);
-      alert("Translation (subject) failed");
-    }
-
-    // body
-    try {
-      const res = await fetch("/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: bodyText, outputLang: outLang }),
-      });
-      const data = await res.json();
-      q("translatedBody").value = data.translated || data.error || "";
-    } catch (err) {
-      console.error("Translate body error", err);
-      alert("Translation (body) failed");
-    }
-  });
-
-  // send email
-  q("sendEmailBtn").addEventListener("click", async () => {
-    const senderEmail = q("senderEmail").value;
-    const senderPassword = q("senderpassword").value;
-    const recipientEmail = q("recipientEmail").value;
-    const subject =
-      q("translatedSubject").value || q("recognizedSubject").value;
-    const body = q("translatedBody").value || q("recognizedBody").value;
-    const attachment = q("attachment").files[0];
-
-    if (
-      !senderEmail ||
-      !senderPassword ||
-      !recipientEmail ||
-      !subject ||
-      !body
-    ) {
-      alert(
-        "Fill sender, app password, recipient, subject and body before sending."
-      );
-      return;
-    }
-
-    const form = new FormData();
-    form.append("senderEmail", senderEmail);
-    form.append("senderPassword", senderPassword);
-    form.append("recipientEmail", recipientEmail);
-    form.append("subject", subject);
-    form.append("body", body);
-    if (attachment) form.append("attachment", attachment);
-
-    try {
-      const res = await fetch("/send_email", { method: "POST", body: form });
-      const json = await res.json();
-      alert(json.message || json.error || "No response");
-    } catch (err) {
-      console.error("Send email error:", err);
-      alert("Failed to send email: " + err.message);
-    }
-  });
-
-  // upload file (separate)
-  q("uploadBtn").addEventListener("click", async () => {
-    const file = q("attachment").files[0];
-    if (!file) {
-      alert("Select a file to upload");
-      return;
-    }
-    const form = new FormData();
-    form.append("file", file);
-    try {
-      const res = await fetch("/upload_attachment", {
-        method: "POST",
-        body: form,
-      });
-      const json = await res.json();
-      alert(json.message || "Uploaded");
-    } catch (err) {
-      console.error("Upload error:", err);
-      alert("Upload failed");
-    }
-  });
-
-  // attach button handlers
-  q("speakSubjectBtn").addEventListener("click", onSpeakSubject);
-  q("continueSubjectBtn").addEventListener("click", onContinueSubject);
-  q("speakBodyBtn").addEventListener("click", onSpeakBody);
-  q("continueBodyBtn").addEventListener("click", onContinueBody);
-
-  // initial button state
-  setRecordingState(false);
-})();
+});
